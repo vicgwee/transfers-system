@@ -2,8 +2,7 @@ install:
 	docker pull postgres:14-alpine
 
 postgres:
-	mkdir -p postgres-data
-	docker run --name postgres -p 5432:5432 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=secret  -v postgres-data:/var/lib/postgresql/data -d postgres:14-alpine
+	docker run --name postgres -p 5432:5432 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=secret  -v postgres_transfers_system:/var/lib/postgresql/data -d postgres:14-alpine
 
 createdb:
 	docker exec -it postgres createdb --username=root --owner=root prod

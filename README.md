@@ -16,7 +16,7 @@ make postgres
 ```
 Create DB and Tables
 ```
-make createdb & make createtables
+make createdb createtables
 ```
 
 ## Run:
@@ -73,6 +73,6 @@ Tested with up to 200 concurrent transactions between two accounts (store_test.g
 As an internal transfers system,the server is secure, there is no need to:
     - have a strong database username and password, and encrypt it while it's stored
     - implement authentication or authorization checks
-    - encrypt the user data (persisted in postgres-data directory)
+    - encrypt the user data (persisted in docker volume)
 The database is reliable, periodic database snapshots and backups are not implemented
 During server and database maintenance/upgrades, downtime is acceptable
