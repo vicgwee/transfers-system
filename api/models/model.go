@@ -1,7 +1,7 @@
 package models
 
 type CreateAccountRequest struct {
-	AccountID      int64  `json:"account_id" binding:"required"`
+	AccountID      int64  `json:"account_id" binding:"required,min=1"`
 	InitialBalance string `json:"initial_balance" binding:"required"`
 }
 type CreateAccountResponse struct {
@@ -18,8 +18,8 @@ type GetAccountResponse struct {
 }
 
 type CreateTransactionRequest struct {
-	SourceAccountID      int64  `json:"source_account_id" binding:"required"`
-	DestinationAccountID int64  `json:"destination_account_id" binding:"required"`
+	SourceAccountID      int64  `json:"source_account_id" binding:"required,min=1"`
+	DestinationAccountID int64  `json:"destination_account_id" binding:"required,min=1"`
 	Amount               string `json:"amount" binding:"required"`
 }
 type CreateTransactionResponse struct {
