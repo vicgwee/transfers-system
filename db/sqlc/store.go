@@ -34,7 +34,7 @@ func NewPgxStore(dbConn *pgxpool.Pool) *PgxStore {
 	}
 }
 
-// TODO: Tune these config settings based on the hardware connectivity
+// TODO: Tune these config settings based on the performance of the server hardware
 const (
 	maxRetries     = 5
 	initialRetryMs = 50
@@ -43,6 +43,9 @@ const (
 
 // CreateTransactionWithLock handles creating transaction and updating account balances safely with DB locking
 func (s *PgxStore) CreateTransactionWithLock(ctx context.Context, param *CreateTransactionParams) (*Transaction, error) {
+	// Prevent deadlock by updating in consistent order based on accountID
+	sqlParam := toCreateTransactionSqlParams(param)
+
 	var transaction *Transaction
 	var err error
 	txOptions := pgx.TxOptions{
@@ -51,21 +54,16 @@ func (s *PgxStore) CreateTransactionWithLock(ctx context.Context, param *CreateT
 	err = s.doTx(ctx, txOptions, func(tx DBTX) error {
 		q := New(tx)
 
-		// Prevent deadlock by locking in consistent order based on accountID
-		lowAccountID, highAccountID := param.SourceAccountID, param.DestinationAccountID
-		if highAccountID > lowAccountID {
-			lowAccountID, highAccountID = highAccountID, lowAccountID
-		}
-		lowAccount, err := q.GetAccountForUpdate(ctx, lowAccountID)
+		lowAccount, err := q.GetAccountForUpdate(ctx, sqlParam.LowAccountID)
 		if err != nil {
 			return util.NewDBError(err)
 		}
-		highAccount, err := q.GetAccountForUpdate(ctx, highAccountID)
+		highAccount, err := q.GetAccountForUpdate(ctx, sqlParam.HighAccountID)
 		if err != nil {
 			return util.NewDBError(err)
 		}
 		sourceAccount, destinationAccount := lowAccount, highAccount
-		if param.SourceAccountID == highAccountID {
+		if param.SourceAccountID == sqlParam.HighAccountID {
 			sourceAccount, destinationAccount = highAccount, lowAccount
 		}
 
@@ -131,25 +129,36 @@ func (s *PgxStore) doTx(ctx context.Context, txOptions pgx.TxOptions, fn func(DB
 	return tx.Commit(ctx)
 }
 
-// CreateTransactionWithSSI handles creating transaction and updating account balances safely with SSI
+const createTransactionSqlTemplate = `
+--name: CreateTransactionSql :exec
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; 
+
+UPDATE accounts
+SET balance = balance + {{.AddLowAmount}}
+WHERE id = {{.LowAccountID}};
+
+UPDATE accounts
+SET balance = balance + {{.AddHighAmount}}
+WHERE id = {{.HighAccountID}};
+
+INSERT INTO transactions (
+	source_account_id,
+	destination_account_id,
+	amount
+) VALUES (
+  {{.SourceAccountID}}, {{.DestinationAccountID}}, {{.Amount}}
+);
+
+COMMIT;`
+
+/*
+CreateTransactionWithSSI handles creating transaction and updating account balances safely with SSI
+*/
 func (s *PgxStore) CreateTransactionWithSSI(ctx context.Context, param *CreateTransactionParams) (*Transaction, error) {
 	// Prevent deadlock by updating in consistent order based on accountID
-	sqlParam := TransactionSqlParam{
-		Amount:               param.Amount,
-		SourceAccountID:      param.SourceAccountID,
-		DestinationAccountID: param.DestinationAccountID,
-		LowAccountID:         param.SourceAccountID,
-		HighAccountID:        param.DestinationAccountID,
-		AddLowAmount:         "-" + param.Amount,
-		AddHighAmount:        param.Amount,
-	}
-	// Swap
-	if sqlParam.HighAccountID > sqlParam.LowAccountID {
-		sqlParam.LowAccountID, sqlParam.HighAccountID = sqlParam.HighAccountID, sqlParam.LowAccountID
-		sqlParam.AddLowAmount, sqlParam.AddHighAmount = sqlParam.AddHighAmount, sqlParam.AddLowAmount
-	}
+	sqlParam := toCreateTransactionSqlParams(param)
 
-	tmpl, err := template.New("DoTransaction").Parse(DoTransactionSqlTemplate)
+	tmpl, err := template.New("CreateTransactionSql").Parse(createTransactionSqlTemplate)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +195,7 @@ func (s *PgxStore) CreateTransactionWithSSI(ctx context.Context, param *CreateTr
 	return nil, util.NewDBError(err)
 }
 
-type TransactionSqlParam struct {
+type createTransactionSqlParam struct {
 	Amount               string
 	SourceAccountID      int64
 	DestinationAccountID int64
@@ -196,24 +205,20 @@ type TransactionSqlParam struct {
 	AddHighAmount        string
 }
 
-const DoTransactionSqlTemplate = `
---name: DoTransaction :exec
-BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE; 
-
-UPDATE accounts
-SET balance = balance + {{.AddLowAmount}}
-WHERE id = {{.LowAccountID}};
-
-UPDATE accounts
-SET balance = balance + {{.AddHighAmount}}
-WHERE id = {{.HighAccountID}};
-
-INSERT INTO transactions (
-	source_account_id,
-	destination_account_id,
-	amount
-) VALUES (
-  {{.SourceAccountID}}, {{.DestinationAccountID}}, {{.Amount}}
-);
-
-COMMIT;`
+func toCreateTransactionSqlParams(param *CreateTransactionParams) *createTransactionSqlParam {
+	sqlParam := createTransactionSqlParam{
+		Amount:               param.Amount,
+		SourceAccountID:      param.SourceAccountID,
+		DestinationAccountID: param.DestinationAccountID,
+		LowAccountID:         param.SourceAccountID,
+		HighAccountID:        param.DestinationAccountID,
+		AddLowAmount:         "-" + param.Amount,
+		AddHighAmount:        param.Amount,
+	}
+	// Swap
+	if sqlParam.HighAccountID > sqlParam.LowAccountID {
+		sqlParam.LowAccountID, sqlParam.HighAccountID = sqlParam.HighAccountID, sqlParam.LowAccountID
+		sqlParam.AddLowAmount, sqlParam.AddHighAmount = sqlParam.AddHighAmount, sqlParam.AddLowAmount
+	}
+	return &sqlParam
+}
