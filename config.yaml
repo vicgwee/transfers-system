@@ -1,0 +1,5 @@
+dbSource: "postgresql://root:secret@localhost:5432/prod?sslmode=disable&pool_max_conns=10"
+serverAddress: "0.0.0.0:8080"
+
+testDbSource: "postgresql://root:secret@localhost:5432/testing?sslmode=disable&pool_max_conns=10"
+
