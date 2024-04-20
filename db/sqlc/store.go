@@ -34,13 +34,6 @@ func NewPgxStore(dbConn *pgxpool.Pool) *PgxStore {
 	}
 }
 
-// TODO: Tune these config settings based on the performance of the server hardware
-const (
-	maxRetries     = 5
-	initialRetryMs = 50
-	randomRetryMs  = 200
-)
-
 // CreateTransactionWithLock handles creating transaction and updating account balances safely with DB locking
 func (s *PgxStore) CreateTransactionWithLock(ctx context.Context, param *CreateTransactionParams) (*Transaction, error) {
 	// Prevent deadlock by updating in consistent order based on accountID
@@ -151,8 +144,16 @@ INSERT INTO transactions (
 
 COMMIT;`
 
+// TODO: Tune these config settings based on the performance of the server hardware
+const (
+	maxRetries     = 5
+	initialRetryMs = 50
+	randomRetryMs  = 200
+)
+
 /*
-CreateTransactionWithSSI handles creating transaction and updating account balances safely with SSI
+CreateTransactionWithSSI handles creating transaction and updating account balances safely with Serializable Snapshot Isolation (SSI)
+With SSI, transactions can fail due to deadlocks and serialization errors, so a retry with simple exponential random backoff is implemented
 */
 func (s *PgxStore) CreateTransactionWithSSI(ctx context.Context, param *CreateTransactionParams) (*Transaction, error) {
 	// Prevent deadlock by updating in consistent order based on accountID

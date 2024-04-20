@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"math/big"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -106,25 +107,28 @@ func TestPgxStore_CreateTransactionTx(t *testing.T) {
 
 func TestPgxStore_CreateTransactionDeadlock(t *testing.T) {
 	numTransactions := 50
+	initialBalance := strconv.Itoa(numTransactions * 2)
+	amountTransacted := strconv.Itoa(numTransactions)
+
 	accountA := &CreateAccountParams{
 		ID:      1,
-		Balance: "100.0",
+		Balance: initialBalance,
 	}
 	accountB := &CreateAccountParams{
 		ID:      2,
-		Balance: "100.0",
+		Balance: initialBalance,
 	}
 	accounts := []*CreateAccountParams{accountA, accountB}
 
 	debit := &CreateTransactionParams{
 		SourceAccountID:      accountA.ID,
 		DestinationAccountID: accountB.ID,
-		Amount:               "1.00000",
+		Amount:               "2.00000",
 	}
 	credit := &CreateTransactionParams{
 		SourceAccountID:      accountB.ID,
 		DestinationAccountID: accountA.ID,
-		Amount:               "0.50000",
+		Amount:               "1.0000",
 	}
 	ctx := context.Background()
 	s := testStore
@@ -161,10 +165,10 @@ func TestPgxStore_CreateTransactionDeadlock(t *testing.T) {
 				require.Equal(t, errCnt.Load(), int64(0))
 				accA, err := s.GetAccount(ctx, accountA.ID)
 				require.NoError(t, err)
-				requireBalanceChange(t, accountA.Balance, accA.Balance, "-25")
+				requireBalanceChange(t, initialBalance, accA.Balance, "-"+amountTransacted)
 				accB, err := s.GetAccount(ctx, accountB.ID)
 				require.NoError(t, err)
-				requireBalanceChange(t, accountB.Balance, accB.Balance, "25")
+				requireBalanceChange(t, initialBalance, accB.Balance, amountTransacted)
 			}
 		})
 	}
