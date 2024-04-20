@@ -1,8 +1,9 @@
 ## Installation:
 
-Install Go (version >= 1.18) and Docker Desktop
-https://go.dev/
-https://www.docker.com/products/docker-desktop/
+Install Go (version >= 1.18), Docker Desktop and Make
+- https://go.dev/
+- https://www.docker.com/products/docker-desktop/
+- https://www.gnu.org/software/make/
 
 ## Setup:
 Install Go dependencies:
@@ -66,13 +67,13 @@ curl --location 'localhost:8080/accounts/1'
 
 
 # Assumptions:
-All accounts created are cash accounts, balance must be >= 0 (enforced by DB constraint)
-AccountID must be >0 (enforced by binding validation check)
-Tested with up to 200 concurrent transactions between two accounts (store_test.go)
+- All accounts created are cash accounts, balance must be >= 0 (enforced by DB constraint)
+- AccountID must be >0 (enforced by binding validation check)
+- Tested with up to 100 concurrent transactions between two accounts (store_test.go)
 
-As an internal transfers system,the server is secure, there is no need to:
+- As an internal transfers system,the server is secure, there is no need to:
     - have a strong database username and password, and encrypt it while it's stored
     - implement authentication or authorization checks
     - encrypt the user data (persisted in docker volume)
-The database is reliable, periodic database snapshots and backups are not implemented
-During server and database maintenance/upgrades, downtime is acceptable
+- The database is reliable, periodic database snapshots and backups are not implemented
+- During server and database maintenance/upgrades, downtime is acceptable
